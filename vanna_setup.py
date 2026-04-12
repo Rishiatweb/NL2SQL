@@ -122,7 +122,7 @@ async def get_agent() -> VannaRuntime:
         tool_registry=tool_registry,
         user_resolver=DefaultUserResolver(),
         agent_memory=agent_memory,
-        config=AgentConfig(stream_responses=True, max_tool_iterations=4),
+        config=AgentConfig(stream_responses=True, max_tool_iterations=8),
     )
 
     log_event("agent_initialized", seed_count=seed_count)

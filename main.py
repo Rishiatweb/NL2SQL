@@ -40,7 +40,9 @@ class ChatResponse(BaseModel):
     rows: list[list[Any]]
     row_count: int
     chart: dict[str, Any]
-    chart_type: str
+    chart_type: str = Field(
+        description="Chart type hint. One of: bar, line, pie, other, none."
+    )
 
 
 class HealthResponse(BaseModel):

@@ -165,4 +165,6 @@ def chart_type_from_figure(chart_payload: dict[str, Any]) -> str:
         return "bar"
     if first_trace_type in {"scatter", "scattergl", "line"}:
         return "line"
-    return "none"
+    if first_trace_type == "pie":
+        return "pie"
+    return "other"
