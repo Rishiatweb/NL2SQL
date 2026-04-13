@@ -378,6 +378,82 @@ placing every question on the primary retrieval path. Round 2 moves from 0/20 to
 
 ---
 
+## Stage 8 — Direct SQL Generation for Novel Questions
+
+### The structural gap that remained
+
+Stages 5 and 7 together ensured that all 40 evaluation questions were covered either
+by a direct seed match or by schema-grounded LLM generation. But the system still had
+no reliable path for questions that arrive **after** the evaluation set — questions a
+real user might ask that nobody anticipated.
+
+The problem was in the fallback chain inside `collect_agent_response`. When the Vanna
+agent failed to produce a `StatusCardComponent` (which happens when Gemini responds in
+prose instead of calling `run_sql`), the only fallbacks were:
+
+1. `extract_sql_from_text` — works if the prose contains an embedded SELECT block
+2. `memory_fallback_sql` at threshold=0.45 — returns the closest seed SQL regardless
+   of whether it actually answers the question
+
+For a truly novel question, option 2 would silently return wrong SQL. The system would
+appear to work (rows returned, no error) while answering a completely different question.
+
+### Changes made
+
+**`generate_sql_directly(question, schema)` added to `main.py`**
+
+A new function that bypasses Vanna's tool-calling machinery and calls Gemini directly
+using the `google.generativeai` SDK (already installed as a transitive dependency):
+
+```python
+model = genai.GenerativeModel("gemini-2.5-flash")
+prompt = (
+    "You are a SQL expert. Write a single valid SQLite SELECT query ...\n"
+    f"Schema:\n{schema}\n\n"
+    "Rules:\n"
+    "- Return ONLY the SQL query. No explanation. No markdown fences.\n"
+    "- Use exact table and column names from the schema.\n"
+    "- status values — appointments: 'Scheduled','Completed','Cancelled','No-Show'; "
+    "  invoices: 'Paid','Pending','Overdue'; gender: 'M','F'\n\n"
+    f"Question: {question}\n\nSQL:"
+)
+response = model.generate_content(prompt)
+```
+
+The prompt is designed to elicit only SQL: no markdown fences, no explanation, exact
+column names enforced by including the full schema and enum values. Any markdown fences
+the model adds anyway are stripped with regex before the SQL is validated and executed.
+
+**Fallback threshold raised from 0.45 to 0.70**
+
+`memory_fallback_sql` now uses threshold=0.70, matching the primary agent retrieval
+threshold. This prevents the old failure mode where a loosely-matching seed was returned
+for an unrelated question.
+
+**New fallback chain in `collect_agent_response`**
+
+```
+Attempt 1  →  Vanna agent  →  StatusCardComponent SQL
+                           →  extract_sql_from_text (if agent replied in prose)
+                           →  generate_sql_directly()  ← new: direct Gemini call
+                           →  memory_fallback_sql (threshold=0.70, genuinely close only)
+Attempt 2  →  Vanna agent with schema-augmented prompt (same chain as above)
+```
+
+**What this means for novel questions**
+
+A question with no seed and low similarity to any seed now goes:
+- Vanna agent tries to generate SQL using the schema injected by `DefaultLlmContextEnhancer`
+- If the agent calls `run_sql` → SQL extracted from `StatusCardComponent`
+- If the agent responds in prose → `generate_sql_directly` produces correct SQL via a
+  focused prompt
+- Either way the SQL is validated by `validate_select_sql` and executed against `clinic.db`
+
+The system now handles arbitrary questions about the database without needing pre-written
+seeds for each one.
+
+---
+
 ## Summary of All Changes
 
 | Area | Initial state | Final state |
@@ -388,7 +464,8 @@ placing every question on the primary retrieval path. Round 2 moves from 0/20 to
 | Agent iterations | 4 (too few for visualisation pipeline) | 8 |
 | SQL validator | Rejects CTE (`WITH...SELECT`) queries | CTE allowed; write-operation CTEs still blocked |
 | Chart types | `bar`, `line`, `none` only | `bar`, `line`, `pie`, `other`, `none` |
-| Response pipeline | Single attempt, hard fail on empty SQL | 2-attempt retry with schema injection + text-extraction + memory-fallback |
+| Response pipeline | Single attempt, hard fail on empty SQL | 2-attempt retry + direct Gemini SQL generation for novel questions |
+| Novel question handling | Wrong-seed fallback at threshold=0.45 | `generate_sql_directly()` with schema + enum values; memory fallback raised to 0.70 |
 | Evaluation tooling | None | `evaluate.py` with `/health` pre-check, auto-populated `RESULTS.md`, 40-question set, per-section scoring |
 | Rate limiting | Evaluator had no pacing | 2.1s inter-request delay keeps 40 questions within 30 req/60s window |
 | RESULTS.md | All rows "Pending" | Populated by live run; honest 20/40 → expected 40/40 after seed expansion |
