@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any
 
-import google.generativeai as genai
+from google import genai as google_genai
 from dotenv import load_dotenv
 
 from fastapi import FastAPI, Request, status
@@ -183,9 +183,6 @@ def generate_sql_directly(question: str, schema: str) -> str:
     if not api_key:
         return ""
 
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-2.5-flash")
-
     prompt = (
         "You are a SQL expert. Write a single valid SQLite SELECT query for the question below.\n\n"
         f"Schema:\n{schema}\n\n"
@@ -199,7 +196,10 @@ def generate_sql_directly(question: str, schema: str) -> str:
     )
 
     try:
-        response = model.generate_content(prompt)
+        client = google_genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model="gemini-2.5-flash", contents=prompt
+        )
         sql = response.text.strip()
         # Strip markdown code fences if the model added them
         sql = re.sub(r"^```(?:sql)?\s*", "", sql, flags=re.IGNORECASE)
