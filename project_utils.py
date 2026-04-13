@@ -105,8 +105,12 @@ def validate_select_sql(sql: str) -> None:
     candidate = _strip_trailing_semicolon(stripped)
     upper_candidate = candidate.upper()
 
-    if not upper_candidate.startswith("SELECT"):
+    if not upper_candidate.startswith("SELECT") and not upper_candidate.startswith("WITH"):
         raise SqlValidationError("Only SELECT statements are allowed.")
+
+    # WITH queries must contain SELECT and must not be data-modifying CTEs
+    if upper_candidate.startswith("WITH") and "SELECT" not in upper_candidate:
+        raise SqlValidationError("WITH clauses must contain a SELECT statement.")
 
     tokens = set(re.findall(r"\b[A-Z_]+\b", upper_candidate))
     blocked = sorted(tokens & BLOCKED_KEYWORDS)

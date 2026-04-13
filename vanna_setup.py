@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from vanna import Agent, AgentConfig
 from vanna.capabilities.sql_runner import RunSqlToolArgs
 from vanna.components import NotificationComponent, SimpleTextComponent, UiComponent
+from vanna.core.enhancer.default import DefaultLlmContextEnhancer
 from vanna.core.registry import ToolRegistry
 from vanna.core.tool import ToolContext, ToolResult
 from vanna.core.user import RequestContext, User, UserResolver
@@ -30,6 +31,25 @@ from project_utils import (
     log_event,
     validate_select_sql,
 )
+
+# Clinic database schema injected into every LLM prompt so the model knows
+# table and column names even when no seed example matches the question.
+_SCHEMA_CONTEXT = """
+Database: clinic.db (SQLite)
+
+Tables and columns:
+- patients(id, first_name, last_name, email, phone, date_of_birth DATE, gender TEXT ('M'|'F'), city TEXT, registered_date DATE)
+- doctors(id, name TEXT, specialization TEXT ('Dermatology'|'Cardiology'|'Orthopedics'|'General'|'Pediatrics'), department TEXT, phone)
+- appointments(id, patient_id FK->patients, doctor_id FK->doctors, appointment_date DATETIME, status TEXT ('Scheduled'|'Completed'|'Cancelled'|'No-Show'), notes)
+- treatments(id, appointment_id FK->appointments, treatment_name TEXT, cost REAL, duration_minutes INTEGER)
+- invoices(id, patient_id FK->patients, invoice_date DATE, total_amount REAL, paid_amount REAL, status TEXT ('Paid'|'Pending'|'Overdue'))
+
+Key relationships:
+- Revenue by doctor: JOIN treatments -> appointments -> doctors (use treatments.cost)
+- Total revenue: SUM(invoices.total_amount)
+- Appointment duration: use treatments.duration_minutes (no native duration on appointments)
+- Departments: doctors.department column (e.g. 'Heart Center', 'Skin Care', 'Bone & Joint')
+""".strip()
 
 
 @dataclass(slots=True)
@@ -75,6 +95,10 @@ async def _seed_agent_memory(memory: DemoAgentMemory, examples: list[SeedExample
         agent_memory=memory,
         metadata={"seed_file": str(SEED_FILE_PATH)},
     )
+
+    # Seed the schema as a text memory so DefaultLlmContextEnhancer appends it
+    # to the system prompt on every query, grounding the LLM in the actual schema.
+    await memory.save_text_memory(content=_SCHEMA_CONTEXT, context=seed_context)
 
     for example in examples:
         await memory.save_tool_usage(
@@ -123,6 +147,7 @@ async def get_agent() -> VannaRuntime:
         user_resolver=DefaultUserResolver(),
         agent_memory=agent_memory,
         config=AgentConfig(stream_responses=True, max_tool_iterations=8),
+        llm_context_enhancer=DefaultLlmContextEnhancer(agent_memory),
     )
 
     log_event("agent_initialized", seed_count=seed_count)
