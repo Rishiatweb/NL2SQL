@@ -403,26 +403,40 @@ appear to work (rows returned, no error) while answering a completely different 
 **`generate_sql_directly(question, schema)` added to `main.py`**
 
 A new function that bypasses Vanna's tool-calling machinery and calls Gemini directly
-using the `google.generativeai` SDK (already installed as a transitive dependency):
+using the `google-genai` SDK (`from google import genai`):
 
 ```python
-model = genai.GenerativeModel("gemini-2.5-flash")
-prompt = (
-    "You are a SQL expert. Write a single valid SQLite SELECT query ...\n"
-    f"Schema:\n{schema}\n\n"
-    "Rules:\n"
-    "- Return ONLY the SQL query. No explanation. No markdown fences.\n"
-    "- Use exact table and column names from the schema.\n"
-    "- status values — appointments: 'Scheduled','Completed','Cancelled','No-Show'; "
-    "  invoices: 'Paid','Pending','Overdue'; gender: 'M','F'\n\n"
-    f"Question: {question}\n\nSQL:"
+client = google_genai.Client(api_key=api_key)
+response = client.models.generate_content(
+    model="gemini-2.5-flash", contents=prompt
 )
-response = model.generate_content(prompt)
 ```
 
 The prompt is designed to elicit only SQL: no markdown fences, no explanation, exact
 column names enforced by including the full schema and enum values. Any markdown fences
 the model adds anyway are stripped with regex before the SQL is validated and executed.
+
+**SDK compatibility fix**
+
+The initial implementation imported `google.generativeai` (the old SDK). At startup
+this raised `ModuleNotFoundError` because the runtime environment has `google-genai`
+(the new unified SDK) rather than the legacy package. The import and call syntax were
+updated to the new API:
+
+```python
+# Old (google-generativeai)
+import google.generativeai as genai
+genai.configure(api_key=key)
+model = genai.GenerativeModel("gemini-2.5-flash")
+response = model.generate_content(prompt)
+
+# New (google-genai >= 1.0.0)
+from google import genai as google_genai
+client = google_genai.Client(api_key=key)
+response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+```
+
+`google-genai>=1.0.0` was added to `requirements.txt` to make the dependency explicit.
 
 **Fallback threshold raised from 0.45 to 0.70**
 
@@ -466,6 +480,7 @@ seeds for each one.
 | Chart types | `bar`, `line`, `none` only | `bar`, `line`, `pie`, `other`, `none` |
 | Response pipeline | Single attempt, hard fail on empty SQL | 2-attempt retry + direct Gemini SQL generation for novel questions |
 | Novel question handling | Wrong-seed fallback at threshold=0.45 | `generate_sql_directly()` with schema + enum values; memory fallback raised to 0.70 |
+| Google SDK import | `google.generativeai` (not installed) | `google-genai>=1.0.0` (`from google import genai`), new Client API |
 | Evaluation tooling | None | `evaluate.py` with `/health` pre-check, auto-populated `RESULTS.md`, 40-question set, per-section scoring |
 | Rate limiting | Evaluator had no pacing | 2.1s inter-request delay keeps 40 questions within 30 req/60s window |
 | RESULTS.md | All rows "Pending" | Populated by live run; honest 20/40 → expected 40/40 after seed expansion |
