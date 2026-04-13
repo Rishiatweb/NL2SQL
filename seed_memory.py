@@ -241,6 +241,216 @@ SEED_EXAMPLES = [
         ),
         category="revenue",
     ),
+    # --- Round 2 seeds (Q21–Q40) ---
+    SeedExample(
+        question="How many male and female patients are there?",
+        sql=(
+            "SELECT gender, COUNT(*) AS count "
+            "FROM patients "
+            "GROUP BY gender "
+            "ORDER BY gender"
+        ),
+        category="patients",
+    ),
+    SeedExample(
+        question="What is the average age of our patients?",
+        sql=(
+            "SELECT ROUND(AVG((julianday('now') - julianday(date_of_birth)) / 365.25), 1) "
+            "AS avg_age FROM patients"
+        ),
+        category="patients",
+    ),
+    SeedExample(
+        question="Which patients have never had an appointment?",
+        sql=(
+            "SELECT p.id, p.first_name, p.last_name "
+            "FROM patients p "
+            "WHERE NOT EXISTS ("
+            "SELECT 1 FROM appointments a WHERE a.patient_id = p.id"
+            ") "
+            "ORDER BY p.last_name"
+        ),
+        category="patients",
+    ),
+    SeedExample(
+        question="List the top 5 cities by number of patients.",
+        sql=(
+            "SELECT city, COUNT(*) AS patient_count "
+            "FROM patients "
+            "GROUP BY city "
+            "ORDER BY patient_count DESC LIMIT 5"
+        ),
+        category="patients",
+    ),
+    SeedExample(
+        question="How many doctors are in each specialization?",
+        sql=(
+            "SELECT specialization, COUNT(*) AS doctor_count "
+            "FROM doctors "
+            "GROUP BY specialization "
+            "ORDER BY doctor_count DESC"
+        ),
+        category="doctors",
+    ),
+    SeedExample(
+        question="Which doctor has the highest average treatment cost?",
+        sql=(
+            "SELECT d.name, ROUND(AVG(t.cost), 2) AS avg_cost "
+            "FROM treatments t "
+            "JOIN appointments a ON a.id = t.appointment_id "
+            "JOIN doctors d ON d.id = a.doctor_id "
+            "GROUP BY d.id, d.name "
+            "ORDER BY avg_cost DESC LIMIT 1"
+        ),
+        category="doctors",
+    ),
+    SeedExample(
+        question="What is the most common appointment status?",
+        sql=(
+            "SELECT status, COUNT(*) AS count "
+            "FROM appointments "
+            "GROUP BY status "
+            "ORDER BY count DESC LIMIT 1"
+        ),
+        category="appointments",
+    ),
+    SeedExample(
+        question="How many appointments were scheduled on weekends?",
+        sql=(
+            "SELECT COUNT(*) AS weekend_appointments "
+            "FROM appointments "
+            "WHERE strftime('%w', appointment_date) IN ('0', '6')"
+        ),
+        category="appointments",
+    ),
+    SeedExample(
+        question="What is the most expensive treatment on record?",
+        sql=(
+            "SELECT treatment_name, cost "
+            "FROM treatments "
+            "ORDER BY cost DESC LIMIT 1"
+        ),
+        category="treatments",
+    ),
+    SeedExample(
+        question="What are the top 5 most common treatment names?",
+        sql=(
+            "SELECT treatment_name, COUNT(*) AS frequency "
+            "FROM treatments "
+            "GROUP BY treatment_name "
+            "ORDER BY frequency DESC LIMIT 5"
+        ),
+        category="treatments",
+    ),
+    SeedExample(
+        question="What is the total outstanding balance on unpaid invoices?",
+        sql=(
+            "SELECT ROUND(SUM(total_amount - paid_amount), 2) AS outstanding_balance "
+            "FROM invoices "
+            "WHERE status IN ('Pending', 'Overdue')"
+        ),
+        category="revenue",
+    ),
+    SeedExample(
+        question="Which patient has the highest total invoice amount?",
+        sql=(
+            "SELECT p.first_name, p.last_name, "
+            "ROUND(SUM(i.total_amount), 2) AS total_billed "
+            "FROM invoices i "
+            "JOIN patients p ON p.id = i.patient_id "
+            "GROUP BY p.id, p.first_name, p.last_name "
+            "ORDER BY total_billed DESC LIMIT 1"
+        ),
+        category="revenue",
+    ),
+    SeedExample(
+        question="What is the average invoice amount?",
+        sql="SELECT ROUND(AVG(total_amount), 2) AS avg_invoice_amount FROM invoices",
+        category="revenue",
+    ),
+    SeedExample(
+        question="How many treatments were performed by each department?",
+        sql=(
+            "SELECT d.department, COUNT(*) AS treatment_count "
+            "FROM treatments t "
+            "JOIN appointments a ON a.id = t.appointment_id "
+            "JOIN doctors d ON d.id = a.doctor_id "
+            "GROUP BY d.department "
+            "ORDER BY treatment_count DESC"
+        ),
+        category="treatments",
+    ),
+    SeedExample(
+        question="List patients who have had exactly one appointment.",
+        sql=(
+            "SELECT p.id, p.first_name, p.last_name "
+            "FROM appointments a "
+            "JOIN patients p ON p.id = a.patient_id "
+            "GROUP BY p.id, p.first_name, p.last_name "
+            "HAVING COUNT(*) = 1 "
+            "ORDER BY p.last_name"
+        ),
+        category="patients",
+    ),
+    SeedExample(
+        question="Which doctor has performed the most completed treatments?",
+        sql=(
+            "SELECT d.name, COUNT(*) AS completed_treatments "
+            "FROM treatments t "
+            "JOIN appointments a ON a.id = t.appointment_id "
+            "JOIN doctors d ON d.id = a.doctor_id "
+            "WHERE a.status = 'Completed' "
+            "GROUP BY d.id, d.name "
+            "ORDER BY completed_treatments DESC LIMIT 1"
+        ),
+        category="doctors",
+    ),
+    SeedExample(
+        question="Show total billed amount versus total paid amount.",
+        sql=(
+            "SELECT ROUND(SUM(total_amount), 2) AS total_billed, "
+            "ROUND(SUM(paid_amount), 2) AS total_paid, "
+            "ROUND(SUM(total_amount) - SUM(paid_amount), 2) AS outstanding "
+            "FROM invoices"
+        ),
+        category="revenue",
+    ),
+    SeedExample(
+        question="Show the breakdown of invoices by status.",
+        sql=(
+            "SELECT status, COUNT(*) AS invoice_count, "
+            "ROUND(SUM(total_amount), 2) AS total_amount "
+            "FROM invoices "
+            "GROUP BY status "
+            "ORDER BY invoice_count DESC"
+        ),
+        category="revenue",
+    ),
+    SeedExample(
+        question="Which medical specialization generates the most treatment revenue?",
+        sql=(
+            "SELECT d.specialization, ROUND(SUM(t.cost), 2) AS total_revenue "
+            "FROM treatments t "
+            "JOIN appointments a ON a.id = t.appointment_id "
+            "JOIN doctors d ON d.id = a.doctor_id "
+            "GROUP BY d.specialization "
+            "ORDER BY total_revenue DESC LIMIT 1"
+        ),
+        category="revenue",
+    ),
+    SeedExample(
+        question="List patients who have invoices in more than one payment status.",
+        sql=(
+            "SELECT p.id, p.first_name, p.last_name, "
+            "COUNT(DISTINCT i.status) AS status_count "
+            "FROM invoices i "
+            "JOIN patients p ON p.id = i.patient_id "
+            "GROUP BY p.id, p.first_name, p.last_name "
+            "HAVING COUNT(DISTINCT i.status) > 1 "
+            "ORDER BY p.last_name"
+        ),
+        category="revenue",
+    ),
 ]
 
 

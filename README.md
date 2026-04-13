@@ -5,7 +5,7 @@ This project is a production-oriented Natural Language to SQL backend built with
 ## Architecture
 
 - `setup_database.py` creates `clinic.db` and seeds realistic clinic data.
-- `seed_memory.py` validates and persists 22 canonical NL→SQL examples into `agent_memory_seed.json`.
+- `seed_memory.py` validates and persists 42 canonical NL→SQL examples into `agent_memory_seed.json`.
 - `vanna_setup.py` builds the Vanna 2.0 agent with `GeminiLlmService`, `SqliteRunner`, `DemoAgentMemory`, and the required tools.
 - `main.py` exposes custom FastAPI endpoints for `/chat` and `/health`.
 - `project_utils.py` centralizes SQL validation, seed loading, logging, and helper logic.
@@ -48,7 +48,7 @@ python evaluate.py
 {
   "status": "ok",
   "database": "connected",
-  "agent_memory_items": 22
+  "agent_memory_items": 42
 }
 ```
 
