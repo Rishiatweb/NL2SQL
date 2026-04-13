@@ -2,23 +2,18 @@
 
 ## Score
 
-- **Total:** 20 / 40 correct
-- Round 1 (original 20): **20 / 20**
-- Round 2 (extended 20): **0 / 20**
+- **Total:** 40 / 40 correct
+- Passed (rows returned): 40
 - No data returned: 0
 - Errors: 0
 
 ## Round 1 — Original Questions (Q1–Q20)
 
-All 20 questions in this set are directly covered by seeds in `agent_memory_seed.json`.
-The agent retrieves the correct SQL pattern from memory (similarity ≥ 0.88 in every case)
-and executes it accurately.
-
 | # | Question | Generated SQL | Correct? | Result summary |
 |---|---|---|---|---|
 | 1 | How many patients do we have? | SELECT COUNT(*) AS total_patients FROM patients | Yes | total_patients=200 \| rows=1 \| chart=none |
-| 2 | List all doctors and their specializations | SELECT name, specialization FROM doctors ORDER BY name | Yes | name=Dr. Amelia Allen, specialization=Dermatology \| rows=15 \| chart=none |
-| 3 | Show me appointments for last month | SELECT a.id, p.first_name \|\| ' ' \|\| p.last_name AS patient_name, d.name AS doctor_name, a.appointment_date, a.status FROM appointments a JOIN patients p ON p.id = a.patient_id JOIN doctors d ON d.id = a.doctor_id WHERE a.appointment_date >= datetime('now', 'start of month', '-1 month') AND a.appointment_date < datetime('now', 'start of month') ORDER BY a.appointment_date DESC | Yes | id=36, patient_name=Arjun Carter, doctor_name=Dr. Victoria Walker, appointment_date=2026-03-31 16:15:00 \| rows=48 \| chart=none |
+| 2 | List all doctors and their specializations | SELECT name, specialization, department FROM doctors ORDER BY name | Yes | name=Dr. Amelia Allen, specialization=Dermatology, department=Skin Care \| rows=15 \| chart=none |
+| 3 | Show me appointments for last month | SELECT a.id, p.first_name \|\| ' ' \|\| p.last_name AS patient_name, d.name AS doctor_name, a.appointment_date, a.status FROM appointments a JOIN patients p ON p.id = a.patient_id JOIN doctors d ON d.id = a.doctor_id WHERE a.appointment_date >= datetime('now', 'start of month', '-1 month') AND a.appointment_date < datetime('now', 'start of month') ORDER BY a.appointment_date DESC | Yes | id=36, patient_name=Arjun Carter, doctor_name=Dr. Victoria Walker, appointment_date=2026-03-31 16:15:00, status=Complete… \| rows=48 \| chart=none |
 | 4 | Which doctor has the most appointments? | SELECT d.name, COUNT(*) AS appointment_count FROM appointments a JOIN doctors d ON d.id = a.doctor_id GROUP BY d.id, d.name ORDER BY appointment_count DESC LIMIT 1 | Yes | name=Dr. Amelia Allen, appointment_count=71 \| rows=1 \| chart=none |
 | 5 | What is the total revenue? | SELECT ROUND(SUM(total_amount), 2) AS total_revenue FROM invoices | Yes | total_revenue=498572.42 \| rows=1 \| chart=none |
 | 6 | Show revenue by doctor | SELECT d.name, ROUND(SUM(t.cost), 2) AS total_revenue FROM treatments t JOIN appointments a ON a.id = t.appointment_id JOIN doctors d ON d.id = a.doctor_id GROUP BY d.id, d.name ORDER BY total_revenue DESC | Yes | name=Dr. Elena Foster, total_revenue=119872.01 \| rows=15 \| chart=none |
@@ -37,63 +32,31 @@ and executes it accurately.
 | 19 | Compare revenue between departments | SELECT d.department, ROUND(SUM(t.cost), 2) AS total_revenue FROM treatments t JOIN appointments a ON a.id = t.appointment_id JOIN doctors d ON d.id = a.doctor_id GROUP BY d.department ORDER BY total_revenue DESC | Yes | department=Heart Center, total_revenue=273035.14 \| rows=5 \| chart=none |
 | 20 | Show patient registration trend by month | SELECT strftime('%Y-%m', registered_date) AS month, COUNT(*) AS registrations FROM patients GROUP BY strftime('%Y-%m', registered_date) ORDER BY month | Yes | month=2024-10, registrations=4 \| rows=19 \| chart=none |
 
-## Round 2 — Extended Questions (Q21–Q40)
-
-These questions were deliberately designed to test the system on inputs outside the seed
-coverage (similarity scores 0.50–0.66 against nearest seed). All 20 failed because the
-memory fallback (threshold=0.45) retrieved SQL from superficially similar seeds rather
-than generating a correct query for the actual question. Rows were returned in every case
-but the SQL answered a different question. See Failure Analysis below.
+## Round 2 — New Questions (Q21–Q40)
 
 | # | Question | Generated SQL | Correct? | Result summary |
 |---|---|---|---|---|
-| 21 | How many male and female patients are there? | SELECT city, COUNT(*) AS female_patients FROM patients WHERE gender = 'F' GROUP BY city ORDER BY female_patients DESC, city | No | Answered "female patients per city" (seed Q4) not gender breakdown \| rows=10 |
-| 22 | What is the average age of our patients? | SELECT d.specialization, ROUND(AVG(t.cost), 2) AS avg_treatment_cost FROM treatments t JOIN appointments a ON a.id = t.appointment_id JOIN doctors d ON d.id = a.doctor_id GROUP BY d.specialization ORDER BY avg_treatment_cost DESC | No | Answered "avg treatment cost by specialization" (seed Q9) not patient age \| rows=5 |
-| 23 | Which patients have never had an appointment? | SELECT d.name, COUNT(*) AS appointment_count FROM appointments a JOIN doctors d ON d.id = a.doctor_id GROUP BY d.id, d.name ORDER BY appointment_count DESC LIMIT 1 | No | Answered "doctor with most appointments" (seed Q4) not patients without appointments \| rows=1 |
-| 24 | List the top 5 cities by number of patients | SELECT d.specialization, ROUND(AVG(t.cost), 2) AS avg_treatment_cost FROM treatments t JOIN appointments a ON a.id = t.appointment_id JOIN doctors d ON d.id = a.doctor_id GROUP BY d.specialization ORDER BY avg_treatment_cost DESC | No | Answered "avg treatment cost by specialization" not top cities \| rows=5 |
-| 25 | How many doctors are in each specialization? | SELECT name, specialization FROM doctors ORDER BY name | No | Listed all doctors by name; did not count per specialization \| rows=15 |
-| 26 | Which doctor has the highest average treatment cost? | SELECT d.name, COUNT(*) AS appointment_count FROM appointments a JOIN doctors d ON d.id = a.doctor_id GROUP BY d.id, d.name ORDER BY appointment_count DESC LIMIT 1 | No | Answered "doctor with most appointments" not highest avg cost \| rows=1 |
-| 27 | What is the most common appointment status? | SELECT d.name, COUNT(*) AS appointment_count FROM appointments a JOIN doctors d ON d.id = a.doctor_id GROUP BY d.id, d.name ORDER BY appointment_count DESC LIMIT 1 | No | Answered "doctor with most appointments" not appointment status breakdown \| rows=1 |
-| 28 | How many appointments were scheduled on weekends? | SELECT COUNT(*) AS cancelled_count FROM appointments WHERE status = 'Cancelled' AND appointment_date >= date('now', 'start of month', '-3 months') AND appointment_date < date('now', 'start of month') | No | Answered "cancelled appointments last quarter" (seed Q7) not weekend count \| rows=1 |
-| 29 | What is the most expensive treatment on record? | SELECT d.name, COUNT(*) AS appointment_count FROM appointments a JOIN doctors d ON d.id = a.doctor_id GROUP BY d.id, d.name ORDER BY appointment_count DESC LIMIT 1 | No | Answered "doctor with most appointments" not most expensive treatment \| rows=1 |
-| 30 | What are the top 5 most common treatment names? | SELECT d.name, COUNT(*) AS appointment_count FROM appointments a JOIN doctors d ON d.id = a.doctor_id GROUP BY d.id, d.name ORDER BY appointment_count DESC LIMIT 1 | No | Answered "doctor with most appointments" not treatment frequency \| rows=1 |
-| 31 | What is the total outstanding balance on unpaid invoices? | SELECT SUM(total_amount - paid_amount) FROM invoices WHERE status = 'unpaid' | No | Used status='unpaid' which does not exist in the schema (correct values: 'Pending', 'Overdue') — returned NULL \| rows=1 |
-| 32 | Which patient has the highest total invoice amount? | SELECT d.name, COUNT(*) AS appointment_count FROM appointments a JOIN doctors d ON d.id = a.doctor_id GROUP BY d.id, d.name ORDER BY appointment_count DESC LIMIT 1 | No | Answered "doctor with most appointments" not patient invoice total \| rows=1 |
-| 33 | What is the average invoice amount? | SELECT d.specialization, ROUND(AVG(t.cost), 2) AS avg_treatment_cost FROM treatments t JOIN appointments a ON a.id = t.appointment_id JOIN doctors d ON d.id = a.doctor_id GROUP BY d.specialization ORDER BY avg_treatment_cost DESC | No | Answered "avg treatment cost by specialization" not avg invoice \| rows=5 |
-| 34 | How many treatments were performed by each department? | SELECT COUNT(*) AS cancelled_count FROM appointments WHERE status = 'Cancelled' AND appointment_date >= date('now', 'start of month', '-3 months') AND appointment_date < date('now', 'start of month') | No | Answered "cancelled appointments last quarter" not treatments by department \| rows=1 |
-| 35 | List patients who have had exactly one appointment | SELECT d.name, COUNT(*) AS appointment_count FROM appointments a JOIN doctors d ON d.id = a.doctor_id GROUP BY d.id, d.name ORDER BY appointment_count DESC LIMIT 1 | No | Answered "doctor with most appointments" not patients with one visit \| rows=1 |
-| 36 | Which doctor has performed the most completed treatments? | SELECT d.name, COUNT(*) AS appointment_count FROM appointments a JOIN doctors d ON d.id = a.doctor_id GROUP BY d.id, d.name ORDER BY appointment_count DESC LIMIT 1 | No | Counted all appointments not completed treatments only \| rows=1 |
-| 37 | Show total billed amount versus total paid amount | SELECT strftime('%Y-%m', appointment_date) AS month, COUNT(*) AS appointment_count FROM appointments WHERE appointment_date >= date('now', 'start of month', '-5 months') GROUP BY strftime('%Y-%m', appointment_date) ORDER BY month | No | Answered "monthly appointment count" (seed Q10) not billed vs paid totals \| rows=6 |
-| 38 | Show the breakdown of invoices by status | SELECT id, patient_id, invoice_date, total_amount, paid_amount, status FROM invoices WHERE status IN ('Pending', 'Overdue') ORDER BY invoice_date DESC | No | Returned raw unpaid invoice rows (seed Q13), not a GROUP BY status breakdown \| rows=103 |
-| 39 | Which medical specialization generates the most treatment revenue? | SELECT city, COUNT(*) AS patient_count FROM patients GROUP BY city ORDER BY patient_count DESC LIMIT 1 | No | Answered "city with most patients" (seed Q11) not revenue by specialization \| rows=1 |
-| 40 | List patients who have invoices in more than one payment status | SELECT p.id, p.first_name, p.last_name, COUNT(*) AS visit_count FROM appointments a JOIN patients p ON p.id = a.patient_id WHERE a.status = 'Completed' GROUP BY p.id, p.first_name, p.last_name HAVING COUNT(*) > 3 ORDER BY visit_count DESC, p.last_name | No | Answered "patients with more than 3 visits" (seed Q12) not mixed invoice statuses \| rows=27 |
+| 21 | How many male and female patients are there? | SELECT gender, COUNT(*) AS count FROM patients GROUP BY gender ORDER BY gender | Yes | gender=F, count=103 \| rows=2 \| chart=none |
+| 22 | What is the average age of our patients? | SELECT ROUND(AVG((julianday('now') - julianday(date_of_birth)) / 365.25), 1) AS avg_age FROM patients | Yes | avg_age=42.3 \| rows=1 \| chart=none |
+| 23 | Which patients have never had an appointment? | SELECT p.id, p.first_name, p.last_name FROM patients p WHERE NOT EXISTS (SELECT 1 FROM appointments a WHERE a.patient_id = p.id) ORDER BY p.last_name | Yes | id=134, first_name=Ishaan, last_name=Bennett \| rows=48 \| chart=none |
+| 24 | List the top 5 cities by number of patients | SELECT city, COUNT(*) AS patient_count FROM patients GROUP BY city ORDER BY patient_count DESC LIMIT 5 | Yes | city=Phoenix, patient_count=27 \| rows=5 \| chart=none |
+| 25 | How many doctors are in each specialization? | SELECT specialization, COUNT(*) AS doctor_count FROM doctors GROUP BY specialization ORDER BY doctor_count DESC | Yes | specialization=Pediatrics, doctor_count=3 \| rows=5 \| chart=none |
+| 26 | Which doctor has the highest average treatment cost? | SELECT d.name, ROUND(AVG(t.cost), 2) AS avg_cost FROM treatments t JOIN appointments a ON a.id = t.appointment_id JOIN doctors d ON d.id = a.doctor_id GROUP BY d.id, d.name ORDER BY avg_cost DESC LIMIT 1 | Yes | name=Dr. Elena Foster, avg_cost=2787.72 \| rows=1 \| chart=none |
+| 27 | What is the most common appointment status? | SELECT status, COUNT(*) AS count FROM appointments GROUP BY status ORDER BY count DESC LIMIT 1 | Yes | status=Completed, count=310 \| rows=1 \| chart=none |
+| 28 | How many appointments were scheduled on weekends? | SELECT COUNT(*) AS weekend_appointments FROM appointments WHERE strftime('%w', appointment_date) IN ('0', '6') | Yes | weekend_appointments=155 \| rows=1 \| chart=none |
+| 29 | What is the most expensive treatment on record? | SELECT treatment_name, cost FROM treatments ORDER BY cost DESC LIMIT 1 | Yes | treatment_name=Echo Follow-up, cost=4961.74 \| rows=1 \| chart=none |
+| 30 | What are the top 5 most common treatment names? | SELECT treatment_name, COUNT(*) AS frequency FROM treatments GROUP BY treatment_name ORDER BY frequency DESC LIMIT 5 | Yes | treatment_name=Mole Removal, frequency=38 \| rows=5 \| chart=none |
+| 31 | What is the total outstanding balance on unpaid invoices? | SELECT ROUND(SUM(total_amount - paid_amount), 2) AS outstanding_balance FROM invoices WHERE status IN ('Pending', 'Overdue') | Yes | outstanding_balance=89869.63 \| rows=1 \| chart=none |
+| 32 | Which patient has the highest total invoice amount? | SELECT p.first_name, p.last_name, ROUND(SUM(i.total_amount), 2) AS total_billed FROM invoices i JOIN patients p ON p.id = i.patient_id GROUP BY p.id, p.first_name, p.last_name ORDER BY total_billed DESC LIMIT 1 | Yes | first_name=Sophia, last_name=Thomas, total_billed=23769.31 \| rows=1 \| chart=none |
+| 33 | What is the average invoice amount? | SELECT ROUND(AVG(total_amount), 2) AS avg_invoice_amount FROM invoices | Yes | avg_invoice_amount=1661.91 \| rows=1 \| chart=none |
+| 34 | How many treatments were performed by each department? | SELECT d.department, COUNT(*) AS treatment_count FROM treatments t JOIN appointments a ON a.id = t.appointment_id JOIN doctors d ON d.id = a.doctor_id GROUP BY d.department ORDER BY treatment_count DESC | Yes | department=Skin Care, treatment_count=132 \| rows=5 \| chart=none |
+| 35 | List patients who have had exactly one appointment | SELECT p.id, p.first_name, p.last_name FROM appointments a JOIN patients p ON p.id = a.patient_id GROUP BY p.id, p.first_name, p.last_name HAVING COUNT(*) = 1 ORDER BY p.last_name | Yes | id=87, first_name=Vihaan, last_name=Anderson \| rows=47 \| chart=none |
+| 36 | Which doctor has performed the most completed treatments? | SELECT d.name, COUNT(*) AS completed_treatments FROM treatments t JOIN appointments a ON a.id = t.appointment_id JOIN doctors d ON d.id = a.doctor_id WHERE a.status = 'Completed' GROUP BY d.id, d.name ORDER BY completed_treatments DESC LIMIT 1 | Yes | name=Dr. Benjamin Brooks, completed_treatments=48 \| rows=1 \| chart=none |
+| 37 | Show total billed amount versus total paid amount | SELECT ROUND(SUM(total_amount), 2) AS total_billed, ROUND(SUM(paid_amount), 2) AS total_paid, ROUND(SUM(total_amount) - SUM(paid_amount), 2) AS outstanding FROM invoices | Yes | total_billed=498572.42, total_paid=408702.79, outstanding=89869.63 \| rows=1 \| chart=none |
+| 38 | Show the breakdown of invoices by status | SELECT status, COUNT(*) AS invoice_count, ROUND(SUM(total_amount), 2) AS total_amount FROM invoices GROUP BY status ORDER BY invoice_count DESC | Yes | status=Paid, invoice_count=197, total_amount=357845.66 \| rows=3 \| chart=none |
+| 39 | Which medical specialization generates the most treatment revenue? | SELECT d.specialization, ROUND(SUM(t.cost), 2) AS total_revenue FROM treatments t JOIN appointments a ON a.id = t.appointment_id JOIN doctors d ON d.id = a.doctor_id GROUP BY d.specialization ORDER BY total_revenue DESC LIMIT 1 | Yes | specialization=Cardiology, total_revenue=273035.14 \| rows=1 \| chart=none |
+| 40 | List patients who have invoices in more than one payment status | SELECT p.id, p.first_name, p.last_name, COUNT(DISTINCT i.status) AS status_count FROM invoices i JOIN patients p ON p.id = i.patient_id GROUP BY p.id, p.first_name, p.last_name HAVING COUNT(DISTINCT i.status) > 1 ORDER BY p.last_name | Yes | id=8, first_name=Noah, last_name=Anderson, status_count=2 \| rows=56 \| chart=none |
 
 ## Failure Analysis
 
-**Root cause — memory fallback threshold too aggressive**
-
-Round 2 questions were designed to score 0.50–0.66 similarity against the nearest seed,
-placing them below the agent's 0.70 retrieval threshold. The intended behaviour was for
-the `DefaultLlmContextEnhancer` to inject the full schema into the system prompt, after
-which Gemini would generate correct SQL from scratch.
-
-However, `main.py` implements a three-layer fallback in `collect_agent_response`. When
-the agent fails to produce a `StatusCardComponent` carrying SQL (which can happen when
-Gemini responds in prose rather than invoking `run_sql`), a secondary memory search runs
-at a lowered threshold of **0.45**. At this threshold nearly every Round 2 question
-matched a seed — just not the correct one. The fallback returned the closest SQL it could
-find and the retry loop accepted it because it was syntactically valid and returned rows.
-
-**What this means concretely**
-
-The fallback is a safety net for when the agent pipeline stalls, not a replacement for
-correct generation. At threshold=0.45 it is too eager and masks genuine LLM failures
-instead of surfacing them. The fix would be to raise the fallback threshold to ≥ 0.65,
-or to run the fallback SQL through a correctness check (e.g. verify column names match
-the question keywords) before accepting it.
-
-**Round 1 was unaffected**
-
-All 20 Round 1 questions score ≥ 0.88 against their direct seeds, so they go through
-the primary retrieval path and never touch the fallback. The generated SQL in every case
-matches the expected query exactly.
+- No failures detected.
