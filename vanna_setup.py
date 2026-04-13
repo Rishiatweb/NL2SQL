@@ -93,15 +93,15 @@ async def get_agent() -> VannaRuntime:
     configure_logging()
     load_dotenv()
 
+    if not Path(DATABASE_PATH).exists():
+        raise FileNotFoundError(
+            "clinic.db was not found. Run `python setup_database.py` before starting the API."
+        )
+
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
         raise ValueError(
             "GOOGLE_API_KEY is required. Add it to your environment or .env file before starting the API."
-        )
-
-    if not Path(DATABASE_PATH).exists():
-        raise FileNotFoundError(
-            "clinic.db was not found. Run `python setup_database.py` before starting the API."
         )
 
     llm_service = GeminiLlmService(model="gemini-2.5-flash", api_key=api_key)
