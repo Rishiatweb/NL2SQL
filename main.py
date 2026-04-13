@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 import uuid
 import sqlite3
@@ -8,6 +9,9 @@ from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any
+
+import google.generativeai as genai
+from dotenv import load_dotenv
 
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
@@ -168,6 +172,44 @@ def get_schema_overview() -> str:
         connection.close()
 
 
+def generate_sql_directly(question: str, schema: str) -> str:
+    """
+    Bypass the Vanna agent and call Gemini directly with a SQL-only prompt.
+    Used when the agent pipeline fails to produce a tool call.
+    Returns a raw SQL string, or "" if generation fails.
+    """
+    load_dotenv()
+    api_key = os.getenv("GOOGLE_API_KEY", "")
+    if not api_key:
+        return ""
+
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel("gemini-2.5-flash")
+
+    prompt = (
+        "You are a SQL expert. Write a single valid SQLite SELECT query for the question below.\n\n"
+        f"Schema:\n{schema}\n\n"
+        "Rules:\n"
+        "- Return ONLY the SQL query. No explanation. No markdown fences.\n"
+        "- Use exact table and column names from the schema.\n"
+        "- For dates use SQLite functions: strftime(), julianday(), date(), datetime().\n"
+        "- status values — appointments: 'Scheduled','Completed','Cancelled','No-Show'; "
+        "invoices: 'Paid','Pending','Overdue'; gender: 'M','F'\n\n"
+        f"Question: {question}\n\nSQL:"
+    )
+
+    try:
+        response = model.generate_content(prompt)
+        sql = response.text.strip()
+        # Strip markdown code fences if the model added them
+        sql = re.sub(r"^```(?:sql)?\s*", "", sql, flags=re.IGNORECASE)
+        sql = re.sub(r"\s*```$", "", sql).strip()
+        return sql
+    except Exception as exc:
+        log_event("direct_sql_generation_failed", error=str(exc))
+        return ""
+
+
 async def build_memory_context(request_context: RequestContext) -> ToolContext:
     if app_state.runtime is None:
         raise RuntimeError("Agent runtime is not initialized.")
@@ -195,7 +237,7 @@ async def memory_fallback_sql(question: str, request_context: RequestContext) ->
         question=question,
         context=context,
         limit=1,
-        similarity_threshold=0.45,
+        similarity_threshold=0.70,
         tool_name_filter="run_sql",
     )
     if not results:
@@ -273,12 +315,23 @@ async def collect_agent_response(question: str, request_context: RequestContext)
             sql_query = extract_sql_from_text(message)
 
         if not sql_query:
-            sql_query, similarity = await memory_fallback_sql(question, request_context)
+            # Direct LLM call: Gemini with a SQL-only prompt and the full schema.
+            # This handles the case where the agent responds in prose instead of
+            # calling run_sql — bypasses Vanna's tool-calling machinery entirely.
+            if not schema_overview:
+                schema_overview = get_schema_overview()
+            sql_query = generate_sql_directly(question, schema_overview)
             if sql_query:
-                log_event("memory_fallback", similarity=similarity)
+                log_event("direct_sql_generation", question=question)
             else:
-                last_error = "The agent did not produce an executable SQL query."
-                continue
+                # Last resort: memory search, but only for genuinely close matches
+                # (threshold 0.70 = same bar as the primary agent retrieval).
+                sql_query, similarity = await memory_fallback_sql(question, request_context)
+                if sql_query:
+                    log_event("memory_fallback", similarity=similarity)
+                else:
+                    last_error = "The agent did not produce an executable SQL query."
+                    continue
 
         if tool_error:
             last_error = tool_error
